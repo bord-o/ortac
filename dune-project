@@ -1,14 +1,22 @@
 (lang dune 3.9)
+
 (generate_opam_files)
+
 (using dune_site 0.1)
+
 (using mdx 0.4)
 
 (version 0.7.2)
 
 (name ortac)
+
 (license MIT)
-(source (github ocaml-gospel/ortac))
+
+(source
+ (github ocaml-gospel/ortac))
+
 (maintainers "Nicolas Osborne <nicolas.osborne@tarides.com>")
+
 (authors
  "Clément Pascutto <clement@pascutto.fr>"
  "Nicolas Osborne <nicolas.osborne@tarides.com>"
@@ -19,97 +27,131 @@
  (synopsis
   "Ortac (OCaml Runtime Assertion Checking) core tool and library based on Gospel")
  (description
-  "\> Ortac (OCaml Runtime Assertion Checking) is a tool to turn
-  "\> executable Gospel specifications into code to test they hold.
-  "\> Ortac Core provides:
-  "\> - a library to turn Gospel terms and types into OCaml expressions
-  "\>   and types,
-  "\> - and a command-line tool.
-  "\> You will need at least one of the Ortac plugins to actually
-  "\> generate test code.
-  )
+  "Ortac (OCaml Runtime Assertion Checking) is a tool to turn\nexecutable Gospel specifications into code to test they hold.\nOrtac Core provides:\n- a library to turn Gospel terms and types into OCaml expressions\n  and types,\n- and a command-line tool.\nYou will need at least one of the Ortac plugins to actually\ngenerate test code.\n")
  (documentation "https://ocaml-gospel.github.io/ortac/ortac-core/")
  (depends
-  (ocaml (>= 4.12.0))
+  (ocaml
+   (>= 4.12.0))
   dune-build-info
   dune-site
-  (cmdliner (>= 1.1.0))
+  (cmdliner
+   (>= 1.1.0))
   fmt
-  (ppxlib (>= 0.26.0))
-  (gospel (= 0.3.0))
-  (alcotest (and :with-test (>= 0.8.1)))
-  (ortac-runtime (and :with-test (= :version))))
+  (ppxlib
+   (>= 0.26.0))
+  (gospel
+   (= 0.3.0))
+  (alcotest
+   (and
+    :with-test
+    (>= 0.8.1)))
+  (ortac-runtime
+   (and
+    :with-test
+    (= :version))))
  (sites
   (lib plugins))
  (conflicts
-  (result (< 1.5))))
+  (result
+   (< 1.5))))
 
 (package
  (name ortac-runtime)
  (synopsis "Runtime support library for Ortac-generated code")
  (description
-  "\> The ortac-runtime library provides support for the code generated
-  "\> by the various Ortac plugins.
-  "\> Ortac (OCaml Runtime Assertion Checking) is a tool to turn
-  "\> executable Gospel specifications into code to test they hold.
-  )
+  "The ortac-runtime library provides support for the code generated\nby the various Ortac plugins.\nOrtac (OCaml Runtime Assertion Checking) is a tool to turn\nexecutable Gospel specifications into code to test they hold.\n")
  (documentation "https://ocaml-gospel.github.io/ortac/ortac-runtime/")
  (depends
-  (ocaml (>= 4.12.0))
-  (fmt (>= 0.8.7))
+  (ocaml
+   (>= 4.12.0))
+  (fmt
+   (>= 0.8.7))
   zarith
-  (monolith (and :with-test (>= 20201026)))))
+  (monolith
+   (and
+    :with-test
+    (>= 20201026)))))
 
 ; Wrapper plugin
+
 (package
  (name ortac-wrapper)
  (synopsis "Wrapper plugin for Ortac")
  (description
-  "\> The Wrapper plugin for the Ortac command-line tool (provided by the
-  "\> ortac-core package) can generate a wrapper module, ie a module that
-  "\> will wrap all function calls with runtime assertion checks that
-  "\> their specifications hold.
-  "\> Ortac (OCaml Runtime Assertion Checking) is a tool to turn
-  "\> executable Gospel specifications into code to test they hold.
-  )
+  "The Wrapper plugin for the Ortac command-line tool (provided by the\nortac-core package) can generate a wrapper module, ie a module that\nwill wrap all function calls with runtime assertion checks that\ntheir specifications hold.\nOrtac (OCaml Runtime Assertion Checking) is a tool to turn\nexecutable Gospel specifications into code to test they hold.\n")
  (authors
   "Clément Pascutto <clement@pascutto.fr>"
   "Nicolas Osborne <nicolas.osborne@tarides.com>"
   "Charlène Gros <charlène@tarides.com>")
  (depends
-  (ocaml (>= 4.12.0))
-  (cmdliner (>= 1.1.0))
+  (ocaml
+   (>= 4.12.0))
+  (cmdliner
+   (>= 1.1.0))
   fmt
-  (ppxlib (>= 0.26.0))
-  (gospel (= 0.3.0))
-  (alcotest (and :with-test (>= 0.8.1)))
-  (ortac-core (= :version))
-  (ortac-runtime (= :version))))
+  (ppxlib
+   (>= 0.26.0))
+  (gospel
+   (= 0.3.0))
+  (alcotest
+   (and
+    :with-test
+    (>= 0.8.1)))
+  (ortac-core
+   (= :version))
+  (ortac-runtime
+   (= :version))))
+
+(package
+ (name ortac-qcheck-pbt)
+ (synopsis "Qcheck plugin for Ortac")
+ (description
+  "The qcheck-ptb plugin for the Ortac command-line tool (provided by\nthe ortac-core package) can generate general property-based tests for a module\nwith Gospel specifications. The generated code will test that the\nfunction specifications hold by using the QCheck library to\ncreate random test cases.\n\nOrtac (OCaml Runtime Assertion Checking) is a tool to turn\nexecutable Gospel specifications into code to test they hold.\n")
+ (authors "Brody Little")
+ (depends
+  (ocaml
+   (>= 4.12.0))
+  (cmdliner
+   (>= 1.1.0))
+  fmt
+  (ppxlib
+   (>= 0.26.0))
+  (gospel
+   (= 0.3.0))
+  (alcotest
+   (and
+    :with-test
+    (>= 0.8.1)))
+  (ortac-core
+   (= :version))
+  (ortac-runtime
+   (= :version))))
 
 ; Monolith plugin
+
 (package
  (name ortac-monolith)
  (synopsis "Monolith plugin for Ortac")
  (description
-  "\> The Monolith plugin for the Ortac command-line tool (provided by
-  "\> the ortac-core package) can generate tests for a module with Gospel
-  "\> specifications. The generated code will test that the function
-  "\> specifications hold by using the Monolith library to compare the
-  "\> behaviours of the original module with a module that adds runtime
-  "\> checks around all function calls.
-  "\> Ortac (OCaml Runtime Assertion Checking) is a tool to turn
-  "\> executable Gospel specifications into code to test they hold.
-  )
+  "The Monolith plugin for the Ortac command-line tool (provided by\nthe ortac-core package) can generate tests for a module with Gospel\nspecifications. The generated code will test that the function\nspecifications hold by using the Monolith library to compare the\nbehaviours of the original module with a module that adds runtime\nchecks around all function calls.\nOrtac (OCaml Runtime Assertion Checking) is a tool to turn\nexecutable Gospel specifications into code to test they hold.\n")
  (authors "Nicolas Osborne <nicolas.osborne@tarides.com>")
  (depends
-  (ocaml (>= 4.12.0))
-  (cmdliner (>= 1.1.0))
+  (ocaml
+   (>= 4.12.0))
+  (cmdliner
+   (>= 1.1.0))
   fmt
-  (ppxlib (>= 0.26.0))
-  (gospel (= 0.3.0))
-  (monolith (and :with-test (>= 20201026)))
+  (ppxlib
+   (>= 0.26.0))
+  (gospel
+   (= 0.3.0))
+  (monolith
+   (and
+    :with-test
+    (>= 20201026)))
   (pprint :with-test)
-  (ortac-core (= :version))
+  (ortac-core
+   (= :version))
   ortac-wrapper
   (ortac-runtime-monolith :with-test)))
 
@@ -117,54 +159,57 @@
  (name ortac-runtime-monolith)
  (synopsis "Runtime support library for Ortac/Monolith-generated code")
  (description
-  "\> The ortac-runtime-monolith library provides support for the code
-  "\> generated by the Ortac/Monolith plugin (provided by the
-  "\> ortac-monolith package).
-  "\>
-  "\> Ortac (OCaml Runtime Assertion Checking) is a tool to turn
-  "\> executable Gospel specifications into code to test they hold.
-  )
+  "The ortac-runtime-monolith library provides support for the code\ngenerated by the Ortac/Monolith plugin (provided by the\nortac-monolith package).\n\nOrtac (OCaml Runtime Assertion Checking) is a tool to turn\nexecutable Gospel specifications into code to test they hold.\n")
  (authors "Nicolas Osborne <nicolas.osborne@tarides.com>")
  (depends
-  (ocaml (>= 4.12.0))
-  (monolith (>= 20201026))
+  (ocaml
+   (>= 4.12.0))
+  (monolith
+   (>= 20201026))
   pprint
-  (fmt (>= 0.9.0))
-  (ortac-runtime (= :version))))
+  (fmt
+   (>= 0.9.0))
+  (ortac-runtime
+   (= :version))))
 
 ; QCheck-STM plugin
+
 (package
  (name ortac-qcheck-stm)
  (synopsis "QCheck-STM plugin for Ortac")
  (description
-  "\> The QCheck-STM plugin for the Ortac command-line tool (provided by
-  "\> the ortac-core package) can generate model-based tests for a module
-  "\> with Gospel specifications. The generated code will test that the
-  "\> function specifications hold by using the QCheck-STM library to
-  "\> create random test cases.
-  "\>
-  "\> Ortac (OCaml Runtime Assertion Checking) is a tool to turn
-  "\> executable Gospel specifications into code to test they hold.
-  )
+  "The QCheck-STM plugin for the Ortac command-line tool (provided by\nthe ortac-core package) can generate model-based tests for a module\nwith Gospel specifications. The generated code will test that the\nfunction specifications hold by using the QCheck-STM library to\ncreate random test cases.\n\nOrtac (OCaml Runtime Assertion Checking) is a tool to turn\nexecutable Gospel specifications into code to test they hold.\n")
  (authors
   "Nicolas Osborne <nicolas.osborne@tarides.com>"
   "Samuel Hym <samuel@tarides.com>"
   "Nikolaus Huber <mail@n-huber.eu>")
  (documentation "https://ocaml-gospel.github.io/ortac/ortac-qcheck-stm/")
  (depends
-  (ocaml (>= 4.12.0))
-  (cmdliner (>= 1.1.0))
+  (ocaml
+   (>= 4.12.0))
+  (cmdliner
+   (>= 1.1.0))
   fmt
-  (ppxlib (>= 0.26.0))
-  (mdx (and :with-test (>= 2.3.0)))
-  (gospel (= 0.3.0))
-  (qcheck-stm (>= 0.5))
-  (ortac-core (= :version))
-  (ortac-runtime-qcheck-stm (= :version)))
+  (ppxlib
+   (>= 0.26.0))
+  (mdx
+   (and
+    :with-test
+    (>= 2.3.0)))
+  (gospel
+   (= 0.3.0))
+  (qcheck-stm
+   (>= 0.5))
+  (ortac-core
+   (= :version))
+  (ortac-runtime-qcheck-stm
+   (= :version)))
  (conflicts
-  (result (< 1.5))))
+  (result
+   (< 1.5))))
 
 ; Dune plugin
+
 (package
  (name ortac-dune)
  (synopsis "Generate dune rules for other ortac plugins")
@@ -173,45 +218,56 @@
   "Nicolas Osborne <nicolas.osborne@tarides.com>"
   "Charlène Gros <charlène@tarides.com>")
  (depends
-  (ocaml (>= 4.12.0))
+  (ocaml
+   (>= 4.12.0))
   fmt
-  (cmdliner (>= 1.1.0))
-  (ortac-core (= :version))
-  (ortac-qcheck-stm (and :with-test (= :version)))
-  (ortac-wrapper (and :with-test (= :version)))))
+  (cmdliner
+   (>= 1.1.0))
+  (ortac-core
+   (= :version))
+  (ortac-qcheck-stm
+   (and
+    :with-test
+    (= :version)))
+  (ortac-wrapper
+   (and
+    :with-test
+    (= :version)))))
 
 (package
  (name ortac-runtime-qcheck-stm)
  (synopsis "Runtime support library for Ortac/QCheck-STM-generated code")
  (description
-  "\> The ortac-runtime-qcheck-stm library provides support for the code
-  "\> generated by the Ortac/QCheck-STM plugin (provided by the
-  "\> ortac-qcheck-stm package).
-  "\>
-  "\> Ortac (OCaml Runtime Assertion Checking) is a tool to turn
-  "\> executable Gospel specifications into code to test they hold.
-  )
+  "The ortac-runtime-qcheck-stm library provides support for the code\ngenerated by the Ortac/QCheck-STM plugin (provided by the\nortac-qcheck-stm package).\n\nOrtac (OCaml Runtime Assertion Checking) is a tool to turn\nexecutable Gospel specifications into code to test they hold.\n")
  (authors
   "Nicolas Osborne <nicolas.osborne@tarides.com>"
   "Nikolaus Huber <mail@n-huber.eu>")
  (depends
-  (ocaml (>= 4.12.0))
-  (qcheck-stm (>= 0.5))
-  (ortac-runtime (= :version))))
+  (ocaml
+   (>= 4.12.0))
+  (qcheck-stm
+   (>= 0.5))
+  (ortac-runtime
+   (= :version))))
 
 (package
  (name ortac-examples)
- (synopsis
-  "Ortac examples on different libraries")
+ (synopsis "Ortac examples on different libraries")
  (authors
   "Nicolas Osborne <nicolas.osborne@tarides.com>"
   "Samuel Hym <samuel@tarides.com>")
  (depends
-  (ocaml (>= 5.0.0))
-  (ortac-core (= :version))
-  (ortac-qcheck-stm (= :version))
-  (ortac-dune (= :version))
-  (lwt-dllist (>= 1.1.0))
-  (varray (>= 0.2))
-  (saturn (= 1.0.0))))
-
+  (ocaml
+   (>= 5.0.0))
+  (ortac-core
+   (= :version))
+  (ortac-qcheck-stm
+   (= :version))
+  (ortac-dune
+   (= :version))
+  (lwt-dllist
+   (>= 1.1.0))
+  (varray
+   (>= 0.2))
+  (saturn
+   (= 1.0.0))))

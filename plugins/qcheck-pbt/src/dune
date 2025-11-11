@@ -1,0 +1,13 @@
+(library
+ (public_name ortac-qcheck-pbt.plugin)
+ (name ortac_qcheck_pbt)
+ (libraries cmdliner fmt ppxlib.astlib gospel ortac-core ortac-core.register)
+ (preprocess
+  (pps ppxlib.metaquot)))
+
+(plugin
+ (name qcheck-pbt)
+ (package ortac-qcheck-pbt)
+ (libraries ortac-qcheck-pbt.plugin)
+ (site
+  (ortac-core plugins)))
