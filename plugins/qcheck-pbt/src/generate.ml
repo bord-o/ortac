@@ -311,3 +311,14 @@ let generate path fmt =
   (* Fmt.pf fmt "%s" "TODO" *)
   (* let ts = signature ~runtime:"Ortac_runtime" ~module_name (List.hd env) sigs in *)
   Fmt.pf fmt "%s%a@." header Format.pp_print_string "Just testing"
+
+let test_value  =
+  let path = "/home/bordo/Git/specs/lib/specs.mli" in
+  let module_name = Ortac_core.Utils.module_name_of_path path in
+  let _ = header in
+  Gospel.Parser_frontend.parse_ocaml_gospel path
+  |> Ortac_core.Utils.type_check [] path
+  |> fun (env, sigs) ->
+  assert (List.length env = 1);
+  (* TODO: take a Gospel tast and generate our output *)
+  print_ir ~module_name (List.hd env) sigs
