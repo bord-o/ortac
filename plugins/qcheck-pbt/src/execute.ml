@@ -18,11 +18,11 @@ let rec find_dune_project_root path =
   else
     find_dune_project_root (Filename.dirname dir)
 
-(** Create a temporary directory in the project root with its own dune-project *)
+(** Create a temporary directory in the project root *)
 let create_temp_dir project_root =
   let random_id = Printf.sprintf "%x" (Random.int 0xFFFFFF) in
   let temp_dir =
-    Filename.concat project_root (".ortac-qcheck-pbt-" ^ random_id)
+    Filename.concat project_root ("ortac-qcheck-pbt-" ^ random_id)
   in
   Unix.mkdir temp_dir 0o755;
   temp_dir
@@ -88,7 +88,7 @@ let run_command ~cwd cmd =
 let safe_remove_temp_dir dir =
   (* Safety check 1: Must match our naming pattern *)
   let basename = Filename.basename dir in
-  if not (String.starts_with ~prefix:".ortac-qcheck-pbt-" basename) then
+  if not (String.starts_with ~prefix:"ortac-qcheck-pbt-" basename) then
     raise (Unsafe_cleanup
       (Printf.sprintf "SAFETY: Refusing to delete %s (wrong pattern)" basename));
 
@@ -97,10 +97,11 @@ let safe_remove_temp_dir dir =
     raise (Unsafe_cleanup
       (Printf.sprintf "SAFETY: Path %s doesn't exist or isn't a directory" dir));
 
-  (* Safety check 3: Must be a hidden directory (starts with .) *)
-  if not (String.starts_with ~prefix:"." basename) then
+  (* Safety check 3: Must not be a critical system directory *)
+  let parent = Filename.dirname dir in
+  if parent = "/" || parent = Filename.get_temp_dir_name () then
     raise (Unsafe_cleanup
-      (Printf.sprintf "SAFETY: Refusing to delete %s (not a hidden directory)" basename));
+      (Printf.sprintf "SAFETY: Refusing to delete in critical location %s" parent));
 
   (* NOW it's safe to remove *)
   let rec remove_recursive path =
