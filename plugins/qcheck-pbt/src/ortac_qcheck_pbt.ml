@@ -3,6 +3,7 @@ open Registration
 
 (* reexpose Generate module as it is used by the monolith plugin for example *)
 module Generate = Generate
+module Execute = Execute
 
 module Plugin : sig
   val cmd : unit Cmd.t
