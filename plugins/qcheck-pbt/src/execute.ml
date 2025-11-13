@@ -33,16 +33,23 @@ let generate_dune temp_dir library_name random_id =
   let dune_content = Printf.sprintf
 {|(executable
  (name %s)
- (public_name %s)
  (libraries qcheck-core qcheck-core.runner ortac-runtime %s))
 |}
-    exe_name exe_name library_name
+    exe_name library_name
   in
   let dune_file = Filename.concat temp_dir "dune" in
   let oc = open_out dune_file in
   output_string oc dune_content;
   close_out oc;
   exe_name
+
+(** Generate the dune-project file *)
+let generate_dune_project temp_dir =
+  let dune_project_content = "(lang dune 3.0)\n" in
+  let dune_project_file = Filename.concat temp_dir "dune-project" in
+  let oc = open_out dune_project_file in
+  output_string oc dune_project_content;
+  close_out oc
 
 (** Generate the dune-workspace file to point to user's installed libraries *)
 let generate_workspace temp_dir project_root =
@@ -176,6 +183,10 @@ let execute ~library_name ~mli_path =
           Fmt.epr "Warning: Failed to cleanup %s: %s@."
             temp_dir (Printexc.to_string e))
     (fun () ->
+      (* Generate dune-project *)
+      generate_dune_project temp_dir;
+      Fmt.epr "Generated dune-project@.";
+
       (* Generate dune-workspace to point to user's installed libraries *)
       generate_workspace temp_dir project_root;
       Fmt.epr "Generated dune-workspace@.";
@@ -202,7 +213,7 @@ let execute ~library_name ~mli_path =
 
       (* Execute tests using dune exec *)
       Fmt.epr "Running tests...@.@.";
-      let exec_cmd = Printf.sprintf "dune exec %s" exe_name in
+      let exec_cmd = Printf.sprintf "dune exec ./%s.exe" exe_name in
       let (test_exit, test_output) = run_command ~cwd:temp_dir exec_cmd in
 
       (* Print test output *)
