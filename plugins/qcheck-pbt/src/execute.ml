@@ -27,14 +27,6 @@ let create_temp_dir project_root =
   Unix.mkdir temp_dir 0o755;
   temp_dir
 
-(** Generate the dune-project file for the temporary workspace *)
-let generate_dune_project temp_dir =
-  let dune_project_content = "(lang dune 3.0)\n" in
-  let dune_project_file = Filename.concat temp_dir "dune-project" in
-  let oc = open_out dune_project_file in
-  output_string oc dune_project_content;
-  close_out oc
-
 (** Generate the dune file for the test executable *)
 let generate_dune temp_dir library_name =
   let dune_content = Printf.sprintf
@@ -154,11 +146,7 @@ let execute ~library_name ~mli_path =
           Fmt.epr "Warning: Failed to cleanup %s: %s@."
             temp_dir (Printexc.to_string e))
     (fun () ->
-      (* Generate dune-project file *)
-      generate_dune_project temp_dir;
-      Fmt.epr "Generated dune-project@.";
-
-      (* Generate dune file *)
+      (* Generate dune file (no dune-project - let it be part of parent workspace) *)
       generate_dune temp_dir library_name;
       Fmt.epr "Generated dune file@.";
 
@@ -166,10 +154,11 @@ let execute ~library_name ~mli_path =
       generate_test_ml temp_dir mli_path module_name;
       Fmt.epr "Generated test.ml@.@.";
 
-      (* Build - run from temp_dir itself since it's now its own workspace *)
+      (* Build from project root - dune will find the temp dir as part of workspace *)
       Fmt.epr "Building tests...@.";
-      let build_cmd = "dune build test.exe" in
-      let (build_exit, build_output) = run_command ~cwd:temp_dir build_cmd in
+      let temp_basename = Filename.basename temp_dir in
+      let build_cmd = Printf.sprintf "dune build %s/test.exe" temp_basename in
+      let (build_exit, build_output) = run_command ~cwd:project_root build_cmd in
 
       if build_exit <> 0 then begin
         Fmt.epr "Build failed:@.%s@." build_output;
@@ -178,10 +167,10 @@ let execute ~library_name ~mli_path =
 
       Fmt.epr "Build succeeded@.@.";
 
-      (* Execute tests *)
+      (* Execute tests using dune exec *)
       Fmt.epr "Running tests...@.@.";
-      let exec_cmd = "dune exec ./test.exe" in
-      let (test_exit, test_output) = run_command ~cwd:temp_dir exec_cmd in
+      let exec_cmd = Printf.sprintf "dune exec %s/test.exe" temp_basename in
+      let (test_exit, test_output) = run_command ~cwd:project_root exec_cmd in
 
       (* Print test output *)
       print_endline test_output;
