@@ -172,8 +172,7 @@ let execute ~library_name ~mli_path =
     Fun.protect
       ~finally:(fun () ->
         try
-          print_endline "skipping cleanup";
-          (* safe_remove_temp_dir temp_dir library_name *)
+          safe_remove_temp_dir temp_dir library_name
         with
         | Unsafe_cleanup msg ->
             Fmt.epr "CLEANUP ERROR: %s@." msg;
