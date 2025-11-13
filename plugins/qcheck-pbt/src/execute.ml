@@ -18,20 +18,22 @@ let rec find_dune_project_root path =
   else
     find_dune_project_root (Filename.dirname dir)
 
-(** Create a temporary directory in the project's _build directory *)
+(** Create a temporary directory in the project root with its own dune-project *)
 let create_temp_dir project_root =
   let random_id = Printf.sprintf "%x" (Random.int 0xFFFFFF) in
-  let build_dir = Filename.concat project_root "_build" in
-
-  (* Create _build if it doesn't exist *)
-  if not (Sys.file_exists build_dir) then
-    Unix.mkdir build_dir 0o755;
-
   let temp_dir =
-    Filename.concat build_dir (".ortac-qcheck-pbt-" ^ random_id)
+    Filename.concat project_root (".ortac-qcheck-pbt-" ^ random_id)
   in
   Unix.mkdir temp_dir 0o755;
   temp_dir
+
+(** Generate the dune-project file for the temporary workspace *)
+let generate_dune_project temp_dir =
+  let dune_project_content = "(lang dune 3.0)\n" in
+  let dune_project_file = Filename.concat temp_dir "dune-project" in
+  let oc = open_out dune_project_file in
+  output_string oc dune_project_content;
+  close_out oc
 
 (** Generate the dune file for the test executable *)
 let generate_dune temp_dir library_name =
@@ -92,21 +94,21 @@ let run_command ~cwd cmd =
 
 (** Safely remove a temporary directory with multiple safety checks *)
 let safe_remove_temp_dir dir =
-  (* Safety check 1: Must contain "_build" *)
-  if not (Str.string_match (Str.regexp ".*_build.*") dir 0) then
-    raise (Unsafe_cleanup
-      (Printf.sprintf "SAFETY: Refusing to delete %s (not in _build)" dir));
-
-  (* Safety check 2: Must match our naming pattern *)
+  (* Safety check 1: Must match our naming pattern *)
   let basename = Filename.basename dir in
   if not (String.starts_with ~prefix:".ortac-qcheck-pbt-" basename) then
     raise (Unsafe_cleanup
       (Printf.sprintf "SAFETY: Refusing to delete %s (wrong pattern)" basename));
 
-  (* Safety check 3: Must exist and be a directory *)
+  (* Safety check 2: Must exist and be a directory *)
   if not (Sys.file_exists dir && Sys.is_directory dir) then
     raise (Unsafe_cleanup
       (Printf.sprintf "SAFETY: Path %s doesn't exist or isn't a directory" dir));
+
+  (* Safety check 3: Must be a hidden directory (starts with .) *)
+  if not (String.starts_with ~prefix:"." basename) then
+    raise (Unsafe_cleanup
+      (Printf.sprintf "SAFETY: Refusing to delete %s (not a hidden directory)" basename));
 
   (* NOW it's safe to remove *)
   let rec remove_recursive path =
@@ -152,6 +154,10 @@ let execute ~library_name ~mli_path =
           Fmt.epr "Warning: Failed to cleanup %s: %s@."
             temp_dir (Printexc.to_string e))
     (fun () ->
+      (* Generate dune-project file *)
+      generate_dune_project temp_dir;
+      Fmt.epr "Generated dune-project@.";
+
       (* Generate dune file *)
       generate_dune temp_dir library_name;
       Fmt.epr "Generated dune file@.";
@@ -160,15 +166,10 @@ let execute ~library_name ~mli_path =
       generate_test_ml temp_dir mli_path module_name;
       Fmt.epr "Generated test.ml@.@.";
 
-      (* Build *)
+      (* Build - run from temp_dir itself since it's now its own workspace *)
       Fmt.epr "Building tests...@.";
-      let rel_path =
-        String.sub temp_dir
-          (String.length project_root + 1)
-          (String.length temp_dir - String.length project_root - 1)
-      in
-      let build_cmd = Printf.sprintf "dune build %s/test.exe" rel_path in
-      let (build_exit, build_output) = run_command ~cwd:project_root build_cmd in
+      let build_cmd = "dune build test.exe" in
+      let (build_exit, build_output) = run_command ~cwd:temp_dir build_cmd in
 
       if build_exit <> 0 then begin
         Fmt.epr "Build failed:@.%s@." build_output;
@@ -179,8 +180,8 @@ let execute ~library_name ~mli_path =
 
       (* Execute tests *)
       Fmt.epr "Running tests...@.@.";
-      let exec_cmd = Printf.sprintf "dune exec %s/test.exe" rel_path in
-      let (test_exit, test_output) = run_command ~cwd:project_root exec_cmd in
+      let exec_cmd = "dune exec ./test.exe" in
+      let (test_exit, test_output) = run_command ~cwd:temp_dir exec_cmd in
 
       (* Print test output *)
       print_endline test_output;
