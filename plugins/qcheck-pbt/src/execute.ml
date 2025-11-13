@@ -45,17 +45,18 @@ let generate_dune temp_dir library_name random_id =
   exe_name
 
 (** Generate the dune-project file *)
-let generate_dune_project temp_dir module_name random_id =
+let generate_dune_project temp_dir module_name random_id library_name =
   let package_name = "ortac-qcheck-pbt-" ^ random_id in
   let dune_project_content = Printf.sprintf
 {|(lang dune 3.0)
 (generate_opam_files true)
+(data_only_dirs %s)
 
 (package
  (name %s)
  (synopsis "Generated tests for the %s module"))
 |}
-    package_name module_name
+    library_name package_name module_name
   in
   let dune_project_file = Filename.concat temp_dir "dune-project" in
   let oc = open_out dune_project_file in
@@ -174,7 +175,7 @@ let execute ~library_name ~mli_path =
         create_project_symlink temp_dir project_root library_name;
 
         (* Generate dune-project file *)
-        generate_dune_project temp_dir module_name random_id;
+        generate_dune_project temp_dir module_name random_id library_name;
 
         (* Generate dune file *)
         let exe_name = generate_dune temp_dir library_name random_id in
