@@ -25,25 +25,28 @@ let create_temp_dir project_root =
     Filename.concat project_root ("ortac-qcheck-pbt-" ^ random_id)
   in
   Unix.mkdir temp_dir 0o755;
-  temp_dir
+  (temp_dir, random_id)
 
 (** Generate the dune file for the test executable *)
-let generate_dune temp_dir library_name =
+let generate_dune temp_dir library_name random_id =
+  let exe_name = "ortac_qcheck_pbt_" ^ random_id in
   let dune_content = Printf.sprintf
 {|(executable
- (name test)
- (libraries qcheck qcheck-core ortac-runtime %s))
+ (name %s)
+ (public_name %s)
+ (libraries qcheck-core qcheck-core.runner ortac-runtime %s))
 |}
-    library_name
+    exe_name exe_name library_name
   in
   let dune_file = Filename.concat temp_dir "dune" in
   let oc = open_out dune_file in
   output_string oc dune_content;
-  close_out oc
+  close_out oc;
+  exe_name
 
 (** Generate the test.ml file with generated test code *)
-let generate_test_ml temp_dir mli_path module_name =
-  let test_file = Filename.concat temp_dir "test.ml" in
+let generate_test_ml temp_dir mli_path module_name exe_name =
+  let test_file = Filename.concat temp_dir (exe_name ^ ".ml") in
   let oc = open_out test_file in
   let fmt = Format.formatter_of_out_channel oc in
 
@@ -131,7 +134,7 @@ let execute ~library_name ~mli_path =
   Fmt.epr "Module name: %s@." module_name;
 
   (* Create temporary directory *)
-  let temp_dir = create_temp_dir project_root in
+  let (temp_dir, random_id) = create_temp_dir project_root in
   Fmt.epr "Created temp directory: %s@." temp_dir;
 
   Fun.protect
@@ -148,17 +151,17 @@ let execute ~library_name ~mli_path =
             temp_dir (Printexc.to_string e))
     (fun () ->
       (* Generate dune file (no dune-project - let it be part of parent workspace) *)
-      generate_dune temp_dir library_name;
+      let exe_name = generate_dune temp_dir library_name random_id in
       Fmt.epr "Generated dune file@.";
 
       (* Generate test.ml *)
-      generate_test_ml temp_dir mli_path module_name;
-      Fmt.epr "Generated test.ml@.@.";
+      generate_test_ml temp_dir mli_path module_name exe_name;
+      Fmt.epr "Generated %s.ml@.@." exe_name;
 
       (* Build from project root - dune will find the temp dir as part of workspace *)
       Fmt.epr "Building tests...@.";
       let temp_basename = Filename.basename temp_dir in
-      let build_cmd = Printf.sprintf "dune build %s/test.exe" temp_basename in
+      let build_cmd = Printf.sprintf "dune build %s/%s.exe" temp_basename exe_name in
       let (build_exit, build_output) = run_command ~cwd:project_root build_cmd in
 
       if build_exit <> 0 then begin
@@ -170,7 +173,7 @@ let execute ~library_name ~mli_path =
 
       (* Execute tests using dune exec *)
       Fmt.epr "Running tests...@.@.";
-      let exec_cmd = Printf.sprintf "dune exec %s/test.exe" temp_basename in
+      let exec_cmd = Printf.sprintf "dune exec %s" exe_name in
       let (test_exit, test_output) = run_command ~cwd:project_root exec_cmd in
 
       (* Print test output *)
