@@ -51,30 +51,6 @@ let generate_dune_project temp_dir =
   output_string oc dune_project_content;
   close_out oc
 
-(** Generate the dune-workspace file to point to user's installed libraries *)
-let generate_workspace temp_dir project_root =
-  (* Convert project_root to absolute path if needed *)
-  let abs_project_root =
-    if Filename.is_relative project_root then
-      Filename.concat (Sys.getcwd ()) project_root
-    else
-      project_root
-  in
-  let install_dir = Filename.concat abs_project_root "_build/install/default/lib" in
-  let workspace_content = Printf.sprintf
-{|(lang dune 3.0)
-(context
- (default
-  (paths
-   (OCAMLPATH %s))))
-|}
-    install_dir
-  in
-  let workspace_file = Filename.concat temp_dir "dune-workspace" in
-  let oc = open_out workspace_file in
-  output_string oc workspace_content;
-  close_out oc
-
 (** Generate the test.ml file with generated test code *)
 let generate_test_ml temp_dir mli_path module_name exe_name =
   let test_file = Filename.concat temp_dir (exe_name ^ ".ml") in
@@ -98,9 +74,13 @@ let generate_test_ml temp_dir mli_path module_name exe_name =
   close_out oc
 
 (** Run a command and return its exit code and output *)
-let run_command ~cwd cmd =
-  let full_cmd = Printf.sprintf "cd %s && %s 2>&1"
-    (Filename.quote cwd) cmd
+let run_command ~cwd ?ocamlpath cmd =
+  let env_prefix = match ocamlpath with
+    | Some path -> Printf.sprintf "env OCAMLPATH=%s " (Filename.quote path)
+    | None -> ""
+  in
+  let full_cmd = Printf.sprintf "cd %s && %s%s 2>&1"
+    (Filename.quote cwd) env_prefix cmd
   in
   let ic = Unix.open_process_in full_cmd in
   let buf = Buffer.create 1024 in
@@ -151,9 +131,18 @@ let safe_remove_temp_dir dir =
 
 (** Execute the generated tests transiently *)
 let execute ~library_name ~mli_path =
-  (* Find project root *)
+  (* Find project root and convert to absolute path *)
   let project_root = find_dune_project_root mli_path in
-  Fmt.epr "Found dune project root: %s@." project_root;
+  let abs_project_root =
+    if Filename.is_relative project_root then
+      if project_root = "." then
+        Sys.getcwd ()
+      else
+        Filename.concat (Sys.getcwd ()) project_root
+    else
+      project_root
+  in
+  Fmt.epr "Found dune project root: %s@." abs_project_root;
 
   (* Extract module name from filename *)
   let module_name =
@@ -164,14 +153,17 @@ let execute ~library_name ~mli_path =
   in
   Fmt.epr "Module name: %s@." module_name;
 
-  (* First, ensure the user's project libraries are installed *)
-  Fmt.epr "Building and installing project libraries...@.";
-  let (install_exit, install_output) = run_command ~cwd:project_root "dune build @install" in
-  if install_exit <> 0 then begin
-    Fmt.epr "Failed to build/install project:@.%s@." install_output;
-    exit install_exit
+  (* Build the project to ensure library files exist *)
+  Fmt.epr "Building project...@.";
+  let (build_proj_exit, build_proj_output) = run_command ~cwd:abs_project_root "dune build" in
+  if build_proj_exit <> 0 then begin
+    Fmt.epr "Failed to build project:@.%s@." build_proj_output;
+    exit build_proj_exit
   end;
-  Fmt.epr "Project libraries installed@.@.";
+  Fmt.epr "Project built@.@.";
+
+  (* Compute OCAMLPATH pointing to actual library files in _build/default/lib *)
+  let ocamlpath = Filename.concat abs_project_root "_build/default/lib" in
 
   (* Create temporary directory in /tmp *)
   let (temp_dir, random_id) = create_temp_dir () in
@@ -194,10 +186,6 @@ let execute ~library_name ~mli_path =
       generate_dune_project temp_dir;
       Fmt.epr "Generated dune-project@.";
 
-      (* Generate dune-workspace to point to user's installed libraries *)
-      generate_workspace temp_dir project_root;
-      Fmt.epr "Generated dune-workspace@.";
-
       (* Generate dune file *)
       let exe_name = generate_dune temp_dir library_name random_id in
       Fmt.epr "Generated dune file@.";
@@ -206,10 +194,10 @@ let execute ~library_name ~mli_path =
       generate_test_ml temp_dir mli_path module_name exe_name;
       Fmt.epr "Generated %s.ml@.@." exe_name;
 
-      (* Build from temp dir - dune-workspace will provide library paths *)
+      (* Build from temp dir with OCAMLPATH pointing to user's libraries *)
       Fmt.epr "Building tests...@.";
       let build_cmd = Printf.sprintf "dune build %s.exe" exe_name in
-      let (build_exit, build_output) = run_command ~cwd:temp_dir build_cmd in
+      let (build_exit, build_output) = run_command ~cwd:temp_dir ~ocamlpath build_cmd in
 
       if build_exit <> 0 then begin
         Fmt.epr "Build failed:@.%s@." build_output;
@@ -218,10 +206,10 @@ let execute ~library_name ~mli_path =
 
       Fmt.epr "Build succeeded@.@.";
 
-      (* Execute tests using dune exec *)
+      (* Execute tests using dune exec with OCAMLPATH *)
       Fmt.epr "Running tests...@.@.";
       let exec_cmd = Printf.sprintf "dune exec ./%s.exe" exe_name in
-      let (test_exit, test_output) = run_command ~cwd:temp_dir exec_cmd in
+      let (test_exit, test_output) = run_command ~cwd:temp_dir ~ocamlpath exec_cmd in
 
       (* Print test output *)
       print_endline test_output;
