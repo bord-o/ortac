@@ -149,7 +149,13 @@ let safe_remove_temp_dir dir library_name =
 (** Execute the generated tests transiently *)
 let execute ~library_name ~mli_path =
   (* Find project root *)
-  let project_root = find_dune_project_root mli_path in
+  let project_root =
+    let root = find_dune_project_root mli_path in
+    if Filename.is_relative root then
+      Filename.concat (Sys.getcwd ()) root
+    else
+      root
+  in
 
   (* Extract module name from filename *)
   let module_name =
