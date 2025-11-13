@@ -5,7 +5,7 @@ exception Unsafe_cleanup of string
 
 val execute : library_name:string -> mli_path:string -> unit
 (** [execute ~library_name ~mli_path] generates QCheck tests from the Gospel
-    specifications in [mli_path], builds them in a temporary directory,
+    specifications in [mli_path], builds them in a temporary directory in /tmp,
     executes the tests, and cleans up.
 
     The [library_name] parameter specifies which dune library contains the
@@ -13,15 +13,18 @@ val execute : library_name:string -> mli_path:string -> unit
 
     The function will:
     1. Find the dune project root
-    2. Create a temporary directory: ortac-qcheck-pbt-XXXXXX
-    3. Generate dune and test.ml in the temp directory
-    4. Build the tests using dune (as part of the parent workspace)
-    5. Execute the tests
-    6. Clean up the temporary directory
-    7. Exit with the test result code
+    2. Run 'dune build @install' in the project to ensure libraries are available
+    3. Create a temporary directory in /tmp: ortac-qcheck-pbt-XXXXXX
+    4. Generate dune-workspace pointing to _build/install/default/lib
+    5. Generate dune and test.ml in the temp directory
+    6. Build the tests using dune (with workspace providing library paths)
+    7. Execute the tests
+    8. Clean up the temporary directory
+    9. Exit with the test result code
 
-    The temporary directory is created in the project root and becomes part
-    of the parent workspace, allowing it to reference local libraries.
+    The temporary directory is created in /tmp and uses a dune-workspace file
+    to access the user's locally installed (but unpublished) libraries via
+    OCAMLPATH, avoiding pollution of the user's project directory.
 
     @raise Failure if no dune-project is found
     @raise Unsafe_cleanup if cleanup safety checks fail *)

@@ -18,11 +18,11 @@ let rec find_dune_project_root path =
   else
     find_dune_project_root (Filename.dirname dir)
 
-(** Create a temporary directory in the project root *)
-let create_temp_dir project_root =
+(** Create a temporary directory in /tmp *)
+let create_temp_dir () =
   let random_id = Printf.sprintf "%x" (Random.int 0xFFFFFF) in
   let temp_dir =
-    Filename.concat project_root ("ortac-qcheck-pbt-" ^ random_id)
+    Filename.concat (Filename.get_temp_dir_name ()) ("ortac-qcheck-pbt-" ^ random_id)
   in
   Unix.mkdir temp_dir 0o755;
   (temp_dir, random_id)
@@ -43,6 +43,23 @@ let generate_dune temp_dir library_name random_id =
   output_string oc dune_content;
   close_out oc;
   exe_name
+
+(** Generate the dune-workspace file to point to user's installed libraries *)
+let generate_workspace temp_dir project_root =
+  let install_dir = Filename.concat project_root "_build/install/default/lib" in
+  let workspace_content = Printf.sprintf
+{|(lang dune 3.0)
+(context
+ (default
+  (paths
+   (OCAMLPATH %s))))
+|}
+    install_dir
+  in
+  let workspace_file = Filename.concat temp_dir "dune-workspace" in
+  let oc = open_out workspace_file in
+  output_string oc workspace_content;
+  close_out oc
 
 (** Generate the test.ml file with generated test code *)
 let generate_test_ml temp_dir mli_path module_name exe_name =
@@ -100,11 +117,11 @@ let safe_remove_temp_dir dir =
     raise (Unsafe_cleanup
       (Printf.sprintf "SAFETY: Path %s doesn't exist or isn't a directory" dir));
 
-  (* Safety check 3: Must not be a critical system directory *)
+  (* Safety check 3: Must be in /tmp *)
   let parent = Filename.dirname dir in
-  if parent = "/" || parent = Filename.get_temp_dir_name () then
+  if parent <> Filename.get_temp_dir_name () then
     raise (Unsafe_cleanup
-      (Printf.sprintf "SAFETY: Refusing to delete in critical location %s" parent));
+      (Printf.sprintf "SAFETY: Refusing to delete outside /tmp: %s" dir));
 
   (* NOW it's safe to remove *)
   let rec remove_recursive path =
@@ -133,8 +150,17 @@ let execute ~library_name ~mli_path =
   in
   Fmt.epr "Module name: %s@." module_name;
 
-  (* Create temporary directory *)
-  let (temp_dir, random_id) = create_temp_dir project_root in
+  (* First, ensure the user's project libraries are installed *)
+  Fmt.epr "Building and installing project libraries...@.";
+  let (install_exit, install_output) = run_command ~cwd:project_root "dune build @install" in
+  if install_exit <> 0 then begin
+    Fmt.epr "Failed to build/install project:@.%s@." install_output;
+    exit install_exit
+  end;
+  Fmt.epr "Project libraries installed@.@.";
+
+  (* Create temporary directory in /tmp *)
+  let (temp_dir, random_id) = create_temp_dir () in
   Fmt.epr "Created temp directory: %s@." temp_dir;
 
   Fun.protect
@@ -150,7 +176,11 @@ let execute ~library_name ~mli_path =
           Fmt.epr "Warning: Failed to cleanup %s: %s@."
             temp_dir (Printexc.to_string e))
     (fun () ->
-      (* Generate dune file (no dune-project - let it be part of parent workspace) *)
+      (* Generate dune-workspace to point to user's installed libraries *)
+      generate_workspace temp_dir project_root;
+      Fmt.epr "Generated dune-workspace@.";
+
+      (* Generate dune file *)
       let exe_name = generate_dune temp_dir library_name random_id in
       Fmt.epr "Generated dune file@.";
 
@@ -158,11 +188,10 @@ let execute ~library_name ~mli_path =
       generate_test_ml temp_dir mli_path module_name exe_name;
       Fmt.epr "Generated %s.ml@.@." exe_name;
 
-      (* Build from project root - dune will find the temp dir as part of workspace *)
+      (* Build from temp dir - dune-workspace will provide library paths *)
       Fmt.epr "Building tests...@.";
-      let temp_basename = Filename.basename temp_dir in
-      let build_cmd = Printf.sprintf "dune build %s/%s.exe" temp_basename exe_name in
-      let (build_exit, build_output) = run_command ~cwd:project_root build_cmd in
+      let build_cmd = Printf.sprintf "dune build %s.exe" exe_name in
+      let (build_exit, build_output) = run_command ~cwd:temp_dir build_cmd in
 
       if build_exit <> 0 then begin
         Fmt.epr "Build failed:@.%s@." build_output;
@@ -174,7 +203,7 @@ let execute ~library_name ~mli_path =
       (* Execute tests using dune exec *)
       Fmt.epr "Running tests...@.@.";
       let exec_cmd = Printf.sprintf "dune exec %s" exe_name in
-      let (test_exit, test_output) = run_command ~cwd:project_root exec_cmd in
+      let (test_exit, test_output) = run_command ~cwd:temp_dir exec_cmd in
 
       (* Print test output *)
       print_endline test_output;
