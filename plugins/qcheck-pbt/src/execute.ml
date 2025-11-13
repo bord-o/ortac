@@ -53,7 +53,14 @@ let generate_dune_project temp_dir =
 
 (** Generate the dune-workspace file to point to user's installed libraries *)
 let generate_workspace temp_dir project_root =
-  let install_dir = Filename.concat project_root "_build/install/default/lib" in
+  (* Convert project_root to absolute path if needed *)
+  let abs_project_root =
+    if Filename.is_relative project_root then
+      Filename.concat (Sys.getcwd ()) project_root
+    else
+      project_root
+  in
+  let install_dir = Filename.concat abs_project_root "_build/install/default/lib" in
   let workspace_content = Printf.sprintf
 {|(lang dune 3.0)
 (context
