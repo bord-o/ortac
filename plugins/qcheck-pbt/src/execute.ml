@@ -45,18 +45,17 @@ let generate_dune temp_dir library_name random_id =
   exe_name
 
 (** Generate the dune-project file *)
-let generate_dune_project temp_dir module_name random_id library_name =
+let generate_dune_project temp_dir module_name random_id =
   let package_name = "ortac-qcheck-pbt-" ^ random_id in
   let dune_project_content = Printf.sprintf
 {|(lang dune 3.0)
 (generate_opam_files true)
-(data_only_dirs %s)
 
 (package
  (name %s)
  (synopsis "Generated tests for the %s module"))
 |}
-    library_name package_name module_name
+    package_name module_name
   in
   let dune_project_file = Filename.concat temp_dir "dune-project" in
   let oc = open_out dune_project_file in
@@ -112,7 +111,7 @@ let create_project_symlink temp_dir project_root library_name =
   Unix.symlink project_root symlink_path
 
 (** Safely remove a temporary directory with multiple safety checks *)
-let safe_remove_temp_dir dir =
+let safe_remove_temp_dir dir library_name =
   (* Safety check 1: Must match our naming pattern *)
   let basename = Filename.basename dir in
   if not (String.starts_with ~prefix:"ortac-qcheck-pbt-" basename) then
@@ -130,7 +129,12 @@ let safe_remove_temp_dir dir =
     raise (Unsafe_cleanup
       (Printf.sprintf "SAFETY: Refusing to delete outside /tmp (found in %s)" parent));
 
-  (* NOW it's safe to remove *)
+  (* Remove symlink first to avoid circular reference during cleanup *)
+  let symlink_path = Filename.concat dir library_name in
+  if Sys.file_exists symlink_path then
+    Sys.remove symlink_path;
+
+  (* NOW it's safe to remove everything else *)
   let rec remove_recursive path =
     if Sys.is_directory path then begin
       Sys.readdir path
@@ -162,7 +166,7 @@ let execute ~library_name ~mli_path =
     Fun.protect
       ~finally:(fun () ->
         try
-          safe_remove_temp_dir temp_dir
+          safe_remove_temp_dir temp_dir library_name
         with
         | Unsafe_cleanup msg ->
             Fmt.epr "CLEANUP ERROR: %s@." msg;
@@ -175,7 +179,7 @@ let execute ~library_name ~mli_path =
         create_project_symlink temp_dir project_root library_name;
 
         (* Generate dune-project file *)
-        generate_dune_project temp_dir module_name random_id library_name;
+        generate_dune_project temp_dir module_name random_id;
 
         (* Generate dune file *)
         let exe_name = generate_dune temp_dir library_name random_id in
