@@ -82,9 +82,6 @@ let generate_assumes (preconditions : Ir.term list) : expression list =
     - Too many return values (>5)
     - Unsupported return pattern *)
 let value_to_property (v : Ir.value) : expression option =
-  (* Build the function arguments *)
-  let pargs = List.map (fun a -> (a.label, pvar a.name)) v.arguments in
-
   (* Get the return pattern and variable names *)
   match return_pattern v.returns with
   | None ->
@@ -140,7 +137,19 @@ let value_to_property (v : Ir.value) : expression option =
                   let_binding
           in
 
-          Some (efun pargs body)
+          (* Build the function pattern based on number of arguments:
+             - 0 args: fun () -> body
+             - 1 arg:  fun x -> body
+             - >1 args: fun (x, y, ...) -> body (tuple pattern to match generator) *)
+          let fun_pattern = match v.arguments with
+            | [] -> ppat_construct (Located.lident "()") None
+            | [ a ] -> pvar a.name
+            | _multi_args ->
+                (* Multiple arguments - use tuple pattern *)
+                ppat_tuple (List.map (fun (a : Ir.ocaml_var) -> pvar a.name) v.arguments)
+          in
+
+          Some (pexp_fun Nolabel None fun_pattern body)
 
 (** Generate a QCheck test definition from a value specification.
 
