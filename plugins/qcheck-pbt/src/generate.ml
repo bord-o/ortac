@@ -151,86 +151,60 @@ let value_to_property (v : Ir.value) : expression option =
 
           Some (pexp_fun Nolabel None fun_pattern body)
 
-(** Generate a QCheck test definition from a value specification.
-
-    Structure:
-    let fname_test =
-      QCheck.Test.make
-        ~count:100
-        ~name:"fname"
-        (combined_generator)
-        fname_property
-
-    Returns None if:
-    - Property generation failed
-    - Generator creation failed (unsupported types)
-    - Too many arguments (>4) *)
-let value_to_test (v : Ir.value) : Ppxlib.structure_item option =
-  (* First check if we can generate the property *)
-  match value_to_property v with
-  | None -> None
-  | Some _prop_expr ->
-      (* Try to generate generators for all arguments *)
-      try
-        let generators =
-          List.map (fun (arg : Ir.ocaml_var) -> Generators.type_to_generator arg.type_) v.arguments
-        in
-
-        (* Combine generators *)
-        let combined_gen = Generators.combine_generators generators in
-
-        (* Build the test:
-           QCheck.Test.make ~count:100 ~name:"fname" gen fname_property *)
-        let test_name_str = estring v.name in
-        let prop_var = evar (v.name ^ "_property") in
-        let test_expr =
-          [%expr
-            QCheck.Test.make
-              ~count:100
-              ~name:[%e test_name_str]
-              [%e combined_gen]
-              [%e prop_var]
-          ]
-        in
-
-        let test_name = v.name ^ "_test" in
-        let vb = value_binding ~pat:(pvar test_name) ~expr:test_expr in
-        Some (pstr_value Nonrecursive [ vb ])
-
-      with Generators.Unsupported_custom_type typename ->
-        Fmt.epr "Warning: Skipping '%s' - %s@."
-          v.name
-          (Generators.format_exception (Generators.Unsupported_custom_type typename));
-        None
-      | Generators.Too_many_arguments n ->
-        Fmt.epr "Warning: Skipping '%s' - %s@."
-          v.name
-          (Generators.format_exception (Generators.Too_many_arguments n));
-        None
-      | Generators.Unsupported_nested_type typename ->
-        Fmt.epr "Warning: Skipping '%s' - %s@."
-          v.name
-          (Generators.format_exception (Generators.Unsupported_nested_type typename));
-        None
-
 (* Convert a value specification to property and test structure items *)
 let value (v : Ir.value) : Ppxlib.structure_item list =
-  (* Generate the property function *)
-  let prop_items = match value_to_property v with
-    | None -> []
-    | Some prop_expr ->
-        let prop_name = v.name ^ "_property" in
-        let vb = value_binding ~pat:(pvar prop_name) ~expr:prop_expr in
-        [ pstr_value Nonrecursive [ vb ] ]
-  in
+  (* Generate the property function (call value_to_property only once) *)
+  match value_to_property v with
+  | None -> []
+  | Some prop_expr ->
+      let prop_name = v.name ^ "_property" in
+      let vb = value_binding ~pat:(pvar prop_name) ~expr:prop_expr in
+      let prop_item = pstr_value Nonrecursive [ vb ] in
 
-  (* Generate the test definition *)
-  let test_items = match value_to_test v with
-    | None -> []
-    | Some test_item -> [ test_item ]
-  in
+      (* Generate the test definition *)
+      let test_items =
+        try
+          let generators =
+            List.map (fun (arg : Ir.ocaml_var) -> Generators.type_to_generator arg.type_) v.arguments
+          in
 
-  prop_items @ test_items
+          let combined_gen = Generators.combine_generators generators in
+
+          let test_name_str = estring v.name in
+          let prop_var = evar (v.name ^ "_property") in
+          let test_expr =
+            [%expr
+              QCheck.Test.make
+                ~count:100
+                ~name:[%e test_name_str]
+                [%e combined_gen]
+                [%e prop_var]
+            ]
+          in
+
+          let test_name = v.name ^ "_test" in
+          let vb = value_binding ~pat:(pvar test_name) ~expr:test_expr in
+          [ pstr_value Nonrecursive [ vb ] ]
+
+        with
+        | Generators.Unsupported_custom_type typename ->
+            Fmt.epr "Warning: Skipping '%s' - %s@."
+              v.name
+              (Generators.format_exception (Generators.Unsupported_custom_type typename));
+            []
+        | Generators.Too_many_arguments n ->
+            Fmt.epr "Warning: Skipping '%s' - %s@."
+              v.name
+              (Generators.format_exception (Generators.Too_many_arguments n));
+            []
+        | Generators.Unsupported_nested_type typename ->
+            Fmt.epr "Warning: Skipping '%s' - %s@."
+              v.name
+              (Generators.format_exception (Generators.Unsupported_nested_type typename));
+            []
+      in
+
+      prop_item :: test_items
 
 (** Generate the test runner main function.
 
@@ -256,42 +230,30 @@ let test_runner (test_names : string list) : Ppxlib.structure_item option =
       let vb = value_binding ~pat:(ppat_construct (lident "()") None) ~expr:runner_expr in
       Some (pstr_value Nonrecursive [ vb ])
 
-(** Collect test names from IR values.
-
-    Returns the list of test names (e.g., ["f_test"; "g_test"]) for
-    values that successfully generate tests. *)
-let collect_test_names (ir : Ir.t) : string list =
-  Ir.map_translation ir ~f:(function
-    | Ir.Value v ->
-        (* Check if this value can generate a test *)
-        (match value_to_test v with
-         | Some _ -> [v.name ^ "_test"]
-         | None -> [])
-    | _ -> []
-  )
-  |> List.flatten
-
 (* Main structure generation *)
 let structure _runtime module_name ir : Ppxlib.structure =
   let include_stmt =
     pmod_ident (lident module_name) |> include_infos |> pstr_include
   in
 
-  let value_items =
+  (* Generate value items and collect test names in one pass to avoid
+     duplicate processing (and duplicate warnings) *)
+  let (value_items, test_names) =
     Ir.map_translation ir ~f:(function
-      | Ir.Value v -> value v
-      | Ir.Type _ -> []
-      | Ir.Projection _ -> []
-      | Ir.Constant _ -> []
-      | Ir.Function _ -> []
-      | Ir.Predicate _ -> []
-      | Ir.Axiom _ -> []
+      | Ir.Value v ->
+          let items = value v in
+          (* If we got more than 1 item, we have both property and test *)
+          let test_name = if List.length items > 1 then [v.name ^ "_test"] else [] in
+          (items, test_name)
+      | Ir.Type _ | Ir.Projection _ | Ir.Constant _ | Ir.Function _ | Ir.Predicate _ | Ir.Axiom _ ->
+          ([], [])
     )
-    |> List.flatten
+    |> List.split
+    |> fun (items_lists, name_lists) ->
+         (List.flatten items_lists, List.flatten name_lists)
   in
 
   (* Generate test runner *)
-  let test_names = collect_test_names ir in
   let runner_items = match test_runner test_names with
     | Some runner -> [runner]
     | None -> []
