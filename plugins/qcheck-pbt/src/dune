@@ -1,7 +1,7 @@
 (library
  (public_name ortac-qcheck-pbt.plugin)
  (name ortac_qcheck_pbt)
- (libraries cmdliner fmt ppxlib.astlib gospel ortac-core ortac-core.register)
+ (libraries cmdliner fmt ppxlib.astlib gospel ortac-core ortac-core.register unix str)
  (preprocess
   (pps ppxlib.metaquot)))
 
