@@ -108,7 +108,7 @@ let run_command ~cwd cmd =
 (** Create a symlink to the project root *)
 let create_project_symlink temp_dir project_root library_name =
   let symlink_path = Filename.concat temp_dir library_name in
-  Unix.symlink project_root symlink_path
+  Unix.symlink ~to_dir:true project_root symlink_path
 
 (** Safely remove a temporary directory with multiple safety checks *)
 let safe_remove_temp_dir dir library_name =
