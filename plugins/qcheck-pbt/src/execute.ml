@@ -18,30 +18,49 @@ let rec find_dune_project_root path =
   else
     find_dune_project_root (Filename.dirname dir)
 
-(** Create a temporary directory in the project root *)
-let create_temp_dir project_root =
+(** Create a temporary directory in /tmp/ *)
+let create_temp_dir () =
+  Random.self_init ();
   let random_id = Printf.sprintf "%x" (Random.int 0xFFFFFF) in
-  let temp_dir =
-    Filename.concat project_root ("ortac-qcheck-pbt-" ^ random_id)
-  in
+  let temp_dir = Filename.concat "/tmp" ("ortac-qcheck-pbt-" ^ random_id) in
   Unix.mkdir temp_dir 0o755;
   (temp_dir, random_id)
 
 (** Generate the dune file for the test executable *)
 let generate_dune temp_dir library_name random_id =
   let exe_name = "ortac_qcheck_pbt_" ^ random_id in
+  let public_name = exe_name in
   let dune_content = Printf.sprintf
 {|(executable
  (name %s)
+ (public_name %s)
  (libraries qcheck-core qcheck-core.runner ortac-runtime %s))
 |}
-    exe_name library_name
+    exe_name public_name library_name
   in
   let dune_file = Filename.concat temp_dir "dune" in
   let oc = open_out dune_file in
   output_string oc dune_content;
   close_out oc;
   exe_name
+
+(** Generate the dune-project file *)
+let generate_dune_project temp_dir module_name random_id =
+  let package_name = "ortac-qcheck-pbt-" ^ random_id in
+  let dune_project_content = Printf.sprintf
+{|(lang dune 3.0)
+(generate_opam_files true)
+
+(package
+ (name %s)
+ (synopsis "Generated tests for the %s module"))
+|}
+    package_name module_name
+  in
+  let dune_project_file = Filename.concat temp_dir "dune-project" in
+  let oc = open_out dune_project_file in
+  output_string oc dune_project_content;
+  close_out oc
 
 (** Generate the test.ml file with generated test code *)
 let generate_test_ml temp_dir mli_path module_name exe_name =
@@ -86,6 +105,11 @@ let run_command ~cwd cmd =
   in
   (exit_code, output)
 
+(** Create a symlink to the project root *)
+let create_project_symlink temp_dir project_root library_name =
+  let symlink_path = Filename.concat temp_dir library_name in
+  Unix.symlink project_root symlink_path
+
 (** Safely remove a temporary directory with multiple safety checks *)
 let safe_remove_temp_dir dir =
   (* Safety check 1: Must match our naming pattern *)
@@ -99,11 +123,11 @@ let safe_remove_temp_dir dir =
     raise (Unsafe_cleanup
       (Printf.sprintf "SAFETY: Path %s doesn't exist or isn't a directory" dir));
 
-  (* Safety check 3: Must not be in critical system directories *)
+  (* Safety check 3: Must be in /tmp *)
   let parent = Filename.dirname dir in
-  if parent = "/" || parent = "/usr" || parent = "/home" || parent = "/root" then
+  if parent <> "/tmp" then
     raise (Unsafe_cleanup
-      (Printf.sprintf "SAFETY: Refusing to delete in critical location %s" parent));
+      (Printf.sprintf "SAFETY: Refusing to delete outside /tmp (found in %s)" parent));
 
   (* NOW it's safe to remove *)
   let rec remove_recursive path =
@@ -121,7 +145,6 @@ let safe_remove_temp_dir dir =
 let execute ~library_name ~mli_path =
   (* Find project root *)
   let project_root = find_dune_project_root mli_path in
-  Fmt.epr "Found dune project root: %s@." project_root;
 
   (* Extract module name from filename *)
   let module_name =
@@ -130,54 +153,52 @@ let execute ~library_name ~mli_path =
     |> Filename.remove_extension
     |> String.capitalize_ascii
   in
-  Fmt.epr "Module name: %s@." module_name;
 
-  (* Create temporary directory in project root *)
-  let (temp_dir, random_id) = create_temp_dir project_root in
-  Fmt.epr "Created temp directory: %s@." temp_dir;
+  (* Create temporary directory in /tmp/ *)
+  let (temp_dir, random_id) = create_temp_dir () in
 
-  Fun.protect
-    ~finally:(fun () ->
-      try
-        safe_remove_temp_dir temp_dir;
-        Fmt.epr "Cleaned up temp directory@."
-      with
-      | Unsafe_cleanup msg ->
-          Fmt.epr "CLEANUP ERROR: %s@." msg;
-          Fmt.epr "Please manually remove: %s@." temp_dir
-      | e ->
-          Fmt.epr "Warning: Failed to cleanup %s: %s@."
-            temp_dir (Printexc.to_string e))
-    (fun () ->
-      (* Generate dune file (no dune-project - becomes part of parent workspace) *)
-      let exe_name = generate_dune temp_dir library_name random_id in
-      Fmt.epr "Generated dune file@.";
+  let exit_code =
+    Fun.protect
+      ~finally:(fun () ->
+        try
+          safe_remove_temp_dir temp_dir
+        with
+        | Unsafe_cleanup msg ->
+            Fmt.epr "CLEANUP ERROR: %s@." msg;
+            Fmt.epr "Please manually remove: %s@." temp_dir
+        | e ->
+            Fmt.epr "Warning: Failed to cleanup %s: %s@."
+              temp_dir (Printexc.to_string e))
+      (fun () ->
+        (* Create symlink to project root *)
+        create_project_symlink temp_dir project_root library_name;
 
-      (* Generate test.ml *)
-      generate_test_ml temp_dir mli_path module_name exe_name;
-      Fmt.epr "Generated %s.ml@.@." exe_name;
+        (* Generate dune-project file *)
+        generate_dune_project temp_dir module_name random_id;
 
-      (* Build from project root - dune will find temp dir as part of workspace *)
-      Fmt.epr "Building tests...@.";
-      let temp_basename = Filename.basename temp_dir in
-      let build_cmd = Printf.sprintf "dune build %s/%s.exe" temp_basename exe_name in
-      let (build_exit, build_output) = run_command ~cwd:project_root build_cmd in
+        (* Generate dune file *)
+        let exe_name = generate_dune temp_dir library_name random_id in
 
-      if build_exit <> 0 then begin
-        Fmt.epr "Build failed:@.%s@." build_output;
-        exit build_exit
-      end;
+        (* Generate test.ml *)
+        generate_test_ml temp_dir mli_path module_name exe_name;
 
-      Fmt.epr "Build succeeded@.@.";
+        (* Build tests *)
+        let (build_exit, build_output) = run_command ~cwd:temp_dir "dune b" in
 
-      (* Execute tests using dune exec from project root *)
-      Fmt.epr "Running tests...@.@.";
-      let exec_cmd = Printf.sprintf "dune exec %s/%s.exe" temp_basename exe_name in
-      let (test_exit, test_output) = run_command ~cwd:project_root exec_cmd in
+        if build_exit <> 0 then begin
+          Fmt.epr "Build failed:@.%s@." build_output;
+          build_exit
+        end else begin
+          (* Execute tests *)
+          let exec_cmd = Printf.sprintf "dune exe %s" exe_name in
+          let (test_exit, test_output) = run_command ~cwd:temp_dir exec_cmd in
 
-      (* Print test output *)
-      print_endline test_output;
+          (* Print test output *)
+          print_endline test_output;
 
-      (* Exit with test result code *)
-      exit test_exit
-    )
+          (* Return test result code *)
+          test_exit
+        end
+      )
+  in
+  exit exit_code
