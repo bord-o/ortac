@@ -1,0 +1,6 @@
+(library
+ (name ortac_qcheck_pbt_test)
+ (libraries ortac_qcheck_pbt)
+ (inline_tests)
+ (preprocess
+  (pps ppx_expect)))
