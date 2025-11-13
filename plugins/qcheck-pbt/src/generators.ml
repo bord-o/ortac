@@ -13,13 +13,13 @@ exception Unsupported_nested_type of string
     Emits warnings for polymorphic instantiation.
     Raises generator_error for unsupported custom types. *)
 let type_to_generator (t : Ir.type_) : expression =
-  (* Helper to build QCheck.Gen.<name> *)
+  (* Helper to build QCheck.<name> *)
   let qcheck_gen name =
-    let lid = Ldot (Ldot (Lident "QCheck", "Gen"), name) in
+    let lid = Ldot (Lident "QCheck", name) in
     pexp_ident { txt = lid; loc = Location.none }
   in
 
-  (* Helper to build QCheck.Gen.(combinator arg) *)
+  (* Helper to build QCheck.(combinator arg) *)
   let qcheck_gen_apply combinator arg =
     pexp_apply (qcheck_gen combinator) [(Nolabel, arg)]
   in
@@ -35,7 +35,7 @@ let type_to_generator (t : Ir.type_) : expression =
 
   (* Polymorphic types - instantiate with int *)
   | "list" ->
-      (* Generate: QCheck.Gen.(list int) *)
+      (* Generate: QCheck.(list int) *)
       Fmt.epr "Warning: Instantiating polymorphic type 'list' with 'int'@.";
       qcheck_gen_apply "list" (qcheck_gen "int")
 
@@ -49,7 +49,7 @@ let type_to_generator (t : Ir.type_) : expression =
 
   | "ref" ->
       Fmt.epr "Warning: Instantiating polymorphic type 'ref' with 'int'@.";
-      qcheck_gen_apply "ref" (qcheck_gen "int")
+      qcheck_gen_apply "make" (* QCheck.make for refs *) (qcheck_gen "int")
 
   (* Gospel stdlib types - map to OCaml equivalents *)
   | "sequence" ->
@@ -88,7 +88,7 @@ let combine_generators (gens : expression list) : expression =
   match gens with
   | [] ->
       (* No arguments - generate unit *)
-      let lid = Ldot (Ldot (Lident "QCheck", "Gen"), "unit") in
+      let lid = Ldot (Lident "QCheck", "unit") in
       pexp_ident { txt = lid; loc = Location.none }
   | [gen] ->
       (* Single argument - pass through *)
