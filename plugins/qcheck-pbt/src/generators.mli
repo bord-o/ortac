@@ -7,9 +7,10 @@ exception Unsupported_nested_type of string
 
 (** [type_to_generator type_] converts an IR type to a QCheck generator expression.
 
-    For polymorphic types (list, option, array), instantiates with int and emits warnings.
+    For built-in polymorphic types (list, option, array), instantiates with int and emits warnings.
+    For custom user-defined types, generates a reference to gen_<typename>.
 
-    @raise Unsupported_custom_type for custom user-defined types *)
+    The user must provide generators named gen_<typename> for all custom types. *)
 val type_to_generator : Ir.type_ -> expression
 
 (** [combine_generators gens] combines multiple generators for multi-argument functions.

@@ -122,6 +122,10 @@
    (and
     :with-test
     (>= 0.8.1)))
+  (ppx_expect
+   (and
+    :with-test
+    (>= 0.14.0)))
   (ortac-core
    (= :version))
   (ortac-runtime

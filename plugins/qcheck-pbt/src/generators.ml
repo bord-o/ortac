@@ -64,9 +64,11 @@ let type_to_generator (t : Ir.type_) : expression =
       Fmt.epr "Warning: Mapping 'bag' to 'list int' (no native bag generator)@.";
       qcheck_gen_apply "list" (qcheck_gen "int")
 
-  (* Unsupported custom types *)
+  (* Custom user-defined types - assume generator is named gen_<typename> *)
   | name ->
-      raise (Unsupported_custom_type name)
+      Fmt.epr "Info: Using custom generator 'gen_%s' for type '%s'@." name name;
+      let gen_name = "gen_" ^ name in
+      pexp_ident { txt = Lident gen_name; loc = Location.none }
 
 (** Combine multiple generators for multi-argument functions.
 
@@ -109,10 +111,11 @@ let combine_generators (gens : expression list) : expression =
 (** Format a generator exception as a user-friendly warning message *)
 let format_exception = function
   | Unsupported_custom_type name ->
+      (* This exception is now rarely raised, kept for future use *)
       Printf.sprintf
-        "Custom type '%s' is not supported in MVP. \
-         Only built-in OCaml types (int, string, bool, list, option, etc.) are supported."
-        name
+        "Custom type '%s' cannot be handled. \
+         Ensure a generator named 'gen_%s' is provided."
+        name name
   | Too_many_arguments n ->
       Printf.sprintf
         "Functions with %d arguments are not supported. \
